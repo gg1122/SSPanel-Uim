@@ -1,10 +1,10 @@
 <?php
 
-
 namespace App\Services\Mail;
 
 use PHPMailer\PHPMailer\PHPMailer;
 use App\Services\Config;
+use App\Models\Setting;
 
 class Smtp extends Base
 {
@@ -17,34 +17,42 @@ class Smtp extends Base
         $mail = new PHPMailer();
         //$mail->SMTPDebug = 3;                               // Enable verbose debug output
         $mail->isSMTP();                                      // Set mailer to use SMTP
-        $mail->Host = $this->config['host'];  // Specify main and backup SMTP servers
+        $mail->Host = $this->config['host'];                  // Specify main and backup SMTP servers
+        $mail->Port = $this->config['port'];                  // TCP port to connect to
         $mail->SMTPAuth = true;                               // Enable SMTP authentication
-        $mail->Username = $this->config['username'];                 // SMTP username
-        $mail->Password = $this->config['passsword'];                    // SMTP password
-        if ($_ENV['smtp_ssl']) {
-            $mail->SMTPSecure = ($_ENV['smtp_port'] == 587 ? 'tls' : 'ssl');                            // Enable TLS encryption, `ssl` also accepted
-        }
-        $mail->Port = $this->config['port'];                                    // TCP port to connect to
+        $mail->CharSet = 'UTF-8';                             // Set utf-8 character set
+        $mail->Username = $this->config['username'];          // SMTP username
+        $mail->Password = $this->config['passsword'];         // SMTP password
         $mail->setFrom($this->config['sender'], $this->config['name']);
-        $mail->addReplyTo($this->config['reply_to'], $this->config['reply_to_name']);
-        $mail->CharSet = 'UTF-8';
+        
+        if ($this->config['smtp_ssl'] == true) {
+            // Enable TLS encryption, `ssl` also accepted
+            $mail->SMTPSecure = ($this->config['port'] == '587' ? 'tls' : 'ssl');
+        }
+
+        if ($this->config['smtp_bbc'] != '') {
+            $mail->addBCC($this->config['smtp_bbc']);
+        }
+
         $this->mail = $mail;
     }
 
     public function getConfig()
     {
+        $configs = Setting::getClass('smtp');
+        
         return [
-            'host' => $_ENV['smtp_host'],
-            'username' => $_ENV['smtp_username'],
-            'port' => $_ENV['smtp_port'],
-            'sender' => $_ENV['smtp_sender'],
-            'name' => $_ENV['smtp_name'],
-            'passsword' => $_ENV['smtp_password'],
-            'reply_to' => $_ENV['smtp_reply_to'],
-            'reply_to_name' => $_ENV['smtp_reply_to_name']
+            'host' => $configs['smtp_host'],
+            'port' => $configs['smtp_port'],
+            'username' => $configs['smtp_username'],
+            'passsword' => $configs['smtp_password'],
+            'smtp_ssl' => $configs['smtp_ssl'],
+            'name' => $configs['smtp_name'],
+            'sender' => $configs['smtp_sender'],
+            'smtp_bbc' => $configs['smtp_bbc']
         ];
     }
-
+    
     public function send($to, $subject, $text, $files)
     {
         $mail = $this->mail;
@@ -55,10 +63,9 @@ class Smtp extends Base
         foreach ($files as $file) {
             $mail->addAttachment($file);
         }
-        // $mail->AltBody = 'This is the body in plain text for non-HTML mail clients';
+
         if (!$mail->send()) {
-            return true;
+            throw new \Exception($mail->ErrorInfo);
         }
-        return false;
     }
 }

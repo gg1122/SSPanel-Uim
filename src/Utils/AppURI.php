@@ -56,23 +56,42 @@ class AppURI
         $return = null;
         switch ($item['type']) {
             case 'vmess':
-                $node = [
-                    'v'     => "2",
-                    'ps'    => $item['remark'],
-                    'add'   => $item['add'],
-                    'port'  => (string)$item['port'],
-                    'id'    => $item['id'],
-                    'aid'   => (string)$item['aid'],
-                    'net'   => $item['net'],
-                    'type'  => $item['headerType'],
-                    'host'  => $item['host'],
-                    'path'  => $item['path'],
-                    'tls'   => $item['tls']
-                ];
-                $return = ('vmess://' . base64_encode(
-                    json_encode($node, 320)
-                ));
-                break;
+		if((string)$item['vtype'] == "vmess://") {
+		   $node = [
+			'v'     => "2",
+			'ps'    => $item['remark'],
+			'add'   => $item['add'],
+			'port'  => (string)$item['port'],
+			'id'    => $item['id'],
+			'aid'   => (string)$item['aid'],
+			'net'   => $item['net'],
+			'type'  => $item['net'] =='grpc' ?  "multi" : $item['headerType'],
+			'host'  => $item['net'] =='grpc' ? '' : $item['host'],
+			'path'  => $item['net'] =='grpc' ?  $item['servicename'] : $item['path'],
+			'tls'   => $item['tls'],
+			'sni'	=> $item['sni']
+	           ];
+		   $return = ('vmess://' . base64_encode(
+			json_encode($node, 320)
+	           ));
+		}else{
+                   $return = 'vless://' . $item['id'] ."@".(string)$item['add'].":".$item['port']."?encryption=none";
+                   $return.="&type=".$item['net'];
+                   $return.="&security=".$item['tls'];
+                   if($item['tls'] == "xtls"){
+                      $return.="&flow=".$item['flow'];
+                   }
+                   if($item['host']!="")$return=$return."&host=". rawurlencode($item['host']);
+                   if($item['host']!="")$return=$return."&sni=".$item['host'];
+                   if($item['path']!="")$return=$return."&path=".rawurlencode($item['path']);
+                   if($item['net'] == "grpc"){
+                       if($item['net'] == "grpc")$return=$return."&mode=multi&serviceName=".$item['servicename'];
+                   }else{
+                       if($item['headerType']!="")$return=$return."&headerType=".$item['headerType'];
+                   }
+                   if ($item['remark']!="")$return=$return."#". rawurlencode($item['remark']);					
+		}
+                break; 
         }
         return $return;
     }
@@ -101,13 +120,14 @@ class AppURI
                         if (!in_array($item['net'], ['ws', 'tcp'])) {
                             break;
                         }
-                        $tls = ($item['tls'] == 'tls'
-                            ? ', tls=true'
-                            : '');
+                        if ($item['tls'] == 'tls') {
+                            $tls = ', tls=true';
+                            $sni = $item['sni'] ? ', ' . $item['sni'] : '';
+                        }
                         $ws = ($item['net'] == 'ws'
                             ? ', ws=true, ws-path=' . $item['path'] . ', ws-headers=host:' . $item['host']
                             : '');
-                        $return = $item['remark'] . ' = vmess, ' . $item['add'] . ', ' . $item['port'] . ', username = ' . $item['id'] . $ws . $tls;
+                        $return = $item['remark'] . ' = vmess, ' . $item['add'] . ', ' . $item['port'] . ', username = ' . $item['id'] . $ws . $tls . $sni;
                         break;
                     case 'trojan':
                         $return = ($item['remark'] . ' = trojan, ' . $item['address'] . ', ' . $item['port'] . ', password=' . $item['passwd']) . ", sni=" . $item['host'];
@@ -252,12 +272,9 @@ class AppURI
         return $return;
     }
 
-    public static function getClashURI(array $item, bool $ssr_support = false)
+    public static function getClashURI(array $item)
     {
         $return = null;
-        if ($item['type'] == 'ssr' && $ssr_support === false) {
-            return $return;
-        }
         switch ($item['type']) {
             case 'ss':
                 $method = ['rc4-md5-6', 'camellia-128-cfb', 'camellia-192-cfb', 'camellia-256-cfb', 'bf-cfb', 'cast5-cfb', 'des-cfb', 'des-ede3-cfb', 'idea-cfb', 'rc2-cfb', 'seed-cfb', 'salsa20', 'chacha20', 'xsalsa20', 'none'];
@@ -307,16 +324,14 @@ class AppURI
                 }
                 break;
             case 'ssr':
-                // if (
-                //     in_array($item['method'], ['rc4-md5-6', 'des-ede3-cfb', 'xsalsa20', 'none'])
-                //     ||
-                //     in_array($item['protocol'], array_merge(Config::getSupportParam('allow_none_protocol'), ['verify_deflate']))
-                //     ||
-                //     in_array($item['obfs'], ['tls1.2_ticket_fastauth'])
-                // ) {
-                //     // 不支持的
-                //     break;
-                // }
+                if (
+                    in_array($item['method'], ['chacha20', 'camellia-128-cfb', 'camellia-192-cfb', 'camellia-256-cfb', 'rc4-md5-6', 'bf-cfb', 'cast5-cfb', 'des-cfb', 'des-ede3-cfb', 'idea-cfb', 'rc2-cfb', 'seed-cfb', 'salsa20', 'xsalsa20', 'none'])
+                    ||
+                    in_array($item['protocol'], ['auth_chain_c', 'auth_chain_d', 'auth_chain_e', 'auth_chain_f','verify_deflate'])
+                ) {
+                    // 不支持的
+                    break;
+                }
                 $return = [
                     'name'            => $item['remark'],
                     'type'            => 'ssr',
@@ -325,13 +340,13 @@ class AppURI
                     'cipher'          => $item['method'],
                     'password'        => $item['passwd'],
                     'protocol'        => $item['protocol'],
-                    'protocolparam'   => $item['protocol_param'],
+                    'protocol-param'   => $item['protocol_param'],
                     'obfs'            => $item['obfs'],
-                    'obfsparam'       => $item['obfs_param']
+                    'obfs-param'       => $item['obfs_param']
                 ];
                 break;
             case 'vmess':
-                if (!in_array($item['net'], array('ws', 'tcp'))) {
+                if (!in_array($item['net'], array('ws', 'tcp', 'grpc'))) {
                     break;
                 }
                 $return = [
@@ -344,8 +359,13 @@ class AppURI
                     'cipher'  => 'auto',
                     'udp'     => true
                 ];
+                if ($item['sni']) {
+                    $return['servername'] = $item['sni'];
+                }
                 if ($item['net'] == 'ws') {
                     $return['network'] = 'ws';
+                    $return['ws-opts']['path'] = $item['path'];
+                    $return['ws-opts']['headers']['Host'] = ($item['host'] != '' ? $item['host'] : $item['add']);
                     $return['ws-path'] = $item['path'];
                     $return['ws-headers']['Host'] = ($item['host'] != '' ? $item['host'] : $item['add']);
                 }
@@ -355,6 +375,11 @@ class AppURI
                         $return['skip-cert-verify'] = true;
                     }
                 }
+                if ($item['net'] == 'grpc') {
+                    $return['network'] = 'grpc';
+                    $return['servername'] = ($item['host'] != '' ? $item['host'] : $item['add']);
+                    $return['grpc-opts']['grpc-service-name'] = ($item['servicename'] != '' ? $item['servicename'] : "");
+                }
                 break;
             case 'trojan':
                 $return = [
@@ -363,8 +388,13 @@ class AppURI
                     'server'      => $item['address'],
                     'port'        => $item['port'],
                     'password'    => $item['passwd'],
-                    'sni'         => $item['host']
+                    'sni'         => $item['host'],
+                    'udp'         => true
                 ];
+                if ($item['net'] == 'grpc') {
+                    $return['network'] = 'grpc';
+                    $return['grpc-opts']['grpc-service-name'] = ($item['servicename'] != '' ? $item['servicename'] : "");
+                }
                 break;
         }
         return $return;
@@ -429,9 +459,9 @@ class AppURI
                     if ($item['verify_cert'] == false) {
                         $tls .= '&allowInsecure=1';
                     }
-                    if (isset($item['localserver'])) {
-                        $tls .= '&peer=' . $item['localserver'];
-                    }
+                    $tls .= ($item['sni']
+                        ? ('&peer=' . $item['sni'])
+                        : ('&peer=' . $item['host']));
                 }
                 $return = ('vmess://' . Tools::base64_url_encode('auto:' . $item['id'] . '@' . $item['add'] . ':' . $item['port']) . '?remarks=' . rawurlencode($item['remark']) . $obfs . $tls . '&alterId=' . $item['aid']);
                 break;
@@ -534,7 +564,57 @@ class AppURI
         switch ($item['type']) {
             case 'trojan':
                 $return  = ('trojan://' . $item['passwd'] . '@' . $item['address'] . ':' . $item['port']);
-                $return .= ('?peer=' . $item['host'] . '&sni=' . $item['host'] . '#' .  rawurlencode($item['remark']));
+                $return .= ('?peer=' . $item['host'] . '&sni=' . $item['host']);
+                if($item['tls'] == "xtls"){
+                   $return.=("&security=".$item['tls']."&flow=".$item['flow']);
+                }
+                $return.=('#' .  rawurlencode($item['remark']));
+                break;
+        }
+        return $return;
+    }
+
+    public static function getAnXrayURI(array $item)
+    {
+        $return = null;
+        switch ($item['type']) {
+            case 'ss':
+                $personal_info = $item['method'] . ':' . $item['passwd'] . '@' . $item['address'] . ':' . $item['port'];
+                $return = 'ss://' . Tools::base64_url_encode($personal_info);
+                $return .= '#' . rawurlencode($item['remark']);
+                break;
+            case 'ssr':
+                $return = $item['address'] . ':' . $item['port'] . ':' . $item['protocol'] . ':' . $item['method'] . ':' . $item['obfs'] . ':' . Tools::base64_url_encode($item['passwd'])
+                . '/?obfsparam=' . Tools::base64_url_encode($item['obfs_param'])
+                . '&protoparam=' . Tools::base64_url_encode($item['protocol_param'])
+                . '&remarks=' . Tools::base64_url_encode($item['remark'])
+                . '&group=' . Tools::base64_url_encode($item['group']);
+                return 'ssr://' . Tools::base64_url_encode($return);
+                break;
+            case 'vmess':
+                $return = $item['vtype'] . $item['id'] ."@".$item['add'].":".$item['port']."?encryption=none";
+                $return.="&type=".$item['net'];
+                $return.="&security=".$item['tls'];
+                if($item['tls'] == "xtls"){
+                   $return.="&flow=".$item['flow'];
+                }
+                if($item['host']!="")$return=$return."&host=". rawurlencode($item['host']);
+                if($item['host']!="")$return=$return."&sni=".$item['host'];
+                if($item['path']!="")$return=$return."&path=".rawurlencode($item['path']);
+                if($item['net'] == "grpc"){
+                   if($item['net'] == "grpc")$return=$return."&mode=multi&serviceName=".$item['servicename'];
+                }else{
+                   if($item['headerType']!="")$return=$return."&headerType=".$item['headerType'];
+                }
+                if ($item['remark']!="")$return=$return."#". rawurlencode($item['remark']);
+                break;
+            case 'trojan':
+                $return  = ('trojan://' . $item['passwd'] . '@' . $item['address'] . ':' . $item['port']);
+                $return .= ('?peer=' . $item['host'] . '&sni=' . $item['host'] );
+                if($item['tls'] == "xtls"){
+                   $return.=("&security=".$item['tls']."&flow=".$item['flow']);
+                }
+                $return.=('#' .  rawurlencode($item['remark']));
                 break;
         }
         return $return;

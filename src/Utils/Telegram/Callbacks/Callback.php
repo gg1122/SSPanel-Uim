@@ -4,11 +4,12 @@ namespace App\Utils\Telegram\Callbacks;
 
 use App\Controllers\LinkController;
 use App\Models\{
-    LoginIp,
-    Node,
     Ip,
-    InviteCode,
+    Node,
     Payback,
+    LoginIp,
+    Setting,
+    InviteCode,
     UserSubscribeLog
 };
 use App\Services\Config;
@@ -937,19 +938,11 @@ class Callback
                     'text'          => 'Clash',
                     'callback_data' => 'user.subscribe|?clash=1'
                 ],
-                [
-                    'text'          => 'ClashR',
-                    'callback_data' => 'user.subscribe|?clash=2'
-                ],
             ],
             [
                 [
                     'text'          => 'Clash Provider',
                     'callback_data' => 'user.subscribe|?list=clash'
-                ],
-                [
-                    'text'          => 'ClashR Provider',
-                    'callback_data' => 'user.subscribe|?list=clashr'
                 ],
             ],
             [
@@ -1048,23 +1041,6 @@ class Callback
                     );
                     unlink($filepath);
                     break;
-                case '?clash=2':
-                    $temp['text'] = '您的 ClashR 配置文件.' . PHP_EOL . '同时，您也可使用该订阅链接：' . $UserApiUrl . $CallbackDataExplode[1];
-                    $filename     = 'ClashR_' . $token . '_' . time() . '.yaml';
-                    $filepath     = BASE_PATH . '/storage/SendTelegram/' . $filename;
-                    $fh           = fopen($filepath, 'w+');
-                    $string       = LinkController::getClash($this->User, 2, [], [], false);
-                    fwrite($fh, $string);
-                    fclose($fh);
-                    $this->bot->sendDocument(
-                        [
-                            'chat_id'  => $this->ChatID,
-                            'document' => $filepath,
-                            'caption'  => $temp['text'],
-                        ]
-                    );
-                    unlink($filepath);
-                    break;
                 case '?quantumult=3':
                     $temp['text'] = '点击打开配置文件，选择分享 拷贝到 Quantumult，选择更新配置.';
                     $filename     = 'Quantumult_' . $token . '_' . time() . '.conf';
@@ -1148,12 +1124,13 @@ class Callback
         if (!$paybacks_sum = Payback::where('ref_by', $this->User->id)->sum('ref_get')) {
             $paybacks_sum = 0;
         }
+        $invitation = Setting::getClass('invite');
         $text = [
             '<strong>分享计划，您每邀请 1 位用户注册：</strong>',
             '',
-            '- 您会获得 <strong>' . $_ENV['invite_gift'] . 'G</strong> 流量奖励.',
-            '- 对方将获得 <strong>' . (int) Config::getconfig('Register.string.defaultInvite_get_money') . ' 元</strong> 奖励作为初始资金.',
-            '- 对方充值时您还会获得对方充值金额的 <strong>' . $_ENV['code_payback'] . '%</strong> 的返利.',
+            '- 您会获得 <strong>' . $invitation['invitation_to_register_traffic_reward'] . 'G</strong> 流量奖励.',
+            '- 对方将获得 <strong>' . $invitation['invitation_to_register_balance_reward'] . ' 元</strong> 奖励作为初始资金.',
+            '- 对方充值时您还会获得对方充值金额的 <strong>' . $invitation['rebate_ratio'] . '%</strong> 的返利.',
             '',
             '已获得返利：' . $paybacks_sum . ' 元.',
         ];

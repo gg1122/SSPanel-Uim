@@ -1,66 +1,92 @@
 <?php
 
-/**
- * Created by PhpStorm.
- * User: tonyzou
- * Date: 2018/9/24
- * Time: 下午7:07
- */
-
 namespace App\Services;
 
 use App\Services\Gateway\{
     AopF2F,
-    Codepay,
+    Vmqpay,
     PaymentWall,
-    ChenPay,
-    SPay,
     PAYJS,
-    YftPay,
-    BitPayX
+    THeadPay,
+    CoinPay
 };
+use App\Utils\ClassHelper;
 
 class Payment
 {
-    public static function getClient()
-    {
-        $method = $_ENV['payment_system'];
-        switch ($method) {
-            case ('codepay'):
-                return new Codepay();
-            case ('paymentwall'):
-                return new PaymentWall();
-            case ('spay'):
-                return new SPay();
-            case ('f2fpay'):
-                return new AopF2F();
-            case ('chenAlipay'):
-                return new ChenPay();
-            case ('payjs'):
-                return new PAYJS($_ENV['payjs_key']);
-            case ('yftpay'):
-                return new YftPay();
-            case ('bitpayx'):
-                return new BitPayX($_ENV['bitpay_secret']);
-            default:
-                return null;
+    // public static function getClient()
+    // {
+    //     $method = $_ENV['payment_system'];
+    //     switch ($method) {
+    //         case ('vmqpay'):
+    //             return new Vmqpay();
+    //         case ('paymentwall'):
+    //             return new PaymentWall();
+    //         case ('f2fpay'):
+    //             return new AopF2F();
+    //         case ('payjs'):
+    //             return new PAYJS();
+    //         case ('theadpay'):
+    //             return new THeadPay();
+    //         case ('coinpay'):
+    //             return new CoinPay();
+    //         default:
+    //             return null;
+    //     }
+    // }
+
+    static function getPaymentsEnabled() {
+        $payments = array();
+
+        $helper = new ClassHelper();
+        $class_list = $helper->getClassesByNamespace("\\App\\Services\\Gateway\\");
+
+        foreach ($class_list as $clazz) {
+            if (get_parent_class($clazz) == "App\\Services\\Gateway\\AbstractPayment") {
+                if ($clazz::_enable()) {
+                    $payments[] = $clazz;
+                }
+            }
         }
+
+        return $payments;
+    }
+
+    static function getPaymentMap() {
+        $result = array();
+
+        foreach (self::getPaymentsEnabled() as $payment) {
+            $result[$payment::_name()] = $payment;
+        }
+
+        return $result;
+    }
+
+    static function getPaymentByName($name) {
+        $all = self::getPaymentMap();
+
+        return $all[$name];
     }
 
     public static function notify($request, $response, $args)
     {
-        return self::getClient()->notify($request, $response, $args);
+        $payment = self::getPaymentByName($args['type']);
+
+        if ($payment != null) {
+            $instance = new $payment();
+            return $instance->notify($request, $response, $args);
+        }
+
+        return $response->withStatus(404);
     }
 
     public static function returnHTML($request, $response, $args)
     {
-        return self::getClient()->getReturnHTML($request, $response, $args);
-    }
+        $payment = self::getPaymentByName($args['type']);
 
-    public static function purchaseHTML()
-    {
-        if (self::getClient() != null) {
-            return self::getClient()->getPurchaseHTML();
+        if ($payment != null) {
+            $instance = new $payment();
+            return $instance->getReturnHTML($request, $response, $args);
         }
 
         return '';
@@ -68,11 +94,25 @@ class Payment
 
     public static function getStatus($request, $response, $args)
     {
-        return self::getClient()->getStatus($request, $response, $args);
+        $payment = self::getPaymentByName($args['type']);
+
+        if ($payment != null) {
+            $instance = new $payment();
+            return $instance->getStatus($request, $response, $args);
+        }
+
+        return $response->withStatus(404);
     }
 
     public static function purchase($request, $response, $args)
     {
-        return self::getClient()->purchase($request, $response, $args);
+        $payment = self::getPaymentByName($args['type']);
+
+        if ($payment != null) {
+            $instance = new $payment();
+            return $instance->purchase($request, $response, $args);
+        }
+
+        return $response->withStatus(404);
     }
 }

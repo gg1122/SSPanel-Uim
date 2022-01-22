@@ -3,7 +3,7 @@
 <main class="content">
     <div class="content-header ui-content-header">
         <div class="container">
-            <h1 class="content-heading">审计记录查看</h1>
+            <h1 class="content-heading">审计记录</h1>
         </div>
     </div>
     <div class="container">
@@ -13,7 +13,6 @@
                     <div class="card-main">
                         <div class="card-inner">
                             <p>系统中所有审计记录。</p>
-                            <p>关于隐私：注意，我们仅用以下规则进行实时匹配和记录匹配到的规则，您的通信方向和通信内容我们不会做任何记录，请您放心。也请您理解我们对于这些不当行为的管理，谢谢。</p>
                         </div>
                     </div>
                 </div>
@@ -36,19 +35,20 @@
                                             <th>时间</th>
                                         </tr>
                                         {foreach $logs as $log}
-                                            {if $log->DetectRule() != null}
+                                            {assign var="rule" value=$log->rule()}
+                                            {if $rule != null}
                                                 <tr>
                                                     <td>#{$log->id}</td>
                                                     <td>{$log->node_id}</td>
                                                     <td>{$log->Node()->name}</td>
                                                     <td>{$log->list_id}</td>
-                                                    <td>{$log->DetectRule()->name}</td>
-                                                    <td>{$log->DetectRule()->text}</td>
-                                                    <td>{$log->DetectRule()->regex}</td>
-                                                    {if $log->DetectRule()->type == 1}
+                                                    <td>{$rule->name}</td>
+                                                    <td>{$rule->text}</td>
+                                                    <td>{$rule->regex}</td>
+                                                    {if $rule->type == 1}
                                                         <td>数据包明文匹配</td>
                                                     {/if}
-                                                    {if $log->DetectRule()->type == 2}
+                                                    {if $rule->type == 2}
                                                         <td>数据包 hex 匹配</td>
                                                     {/if}
                                                     <td>{date('Y-m-d H:i:s',$log->datetime)}</td>

@@ -65,9 +65,9 @@
                 {foreach $ticketset as $ticket}
                     <div class="card">
                         <aside class="card-side pull-left" style="padding: 16px; text-align: center">
-                            <img style="border-radius: 100%; width: 100%" src="{$ticket->User()->gravatar}">
+                            <img style="border-radius: 100%; width: 100%" src="{$ticket->user()->gravatar}">
                             <br>
-                            {$ticket->User()->user_name}
+                            {$ticket->user()->user_name}
                         </aside>
                         <div class="card-main">
                             <div class="card-inner">
@@ -85,7 +85,7 @@
 
 {include file='admin/footer.tpl'}
 
-<script src="https://cdn.jsdelivr.net/npm/editor.md@1.5.0/editormd.min.js"></script>
+<script src="https://cdn.staticfile.org/editor-md/1.5.0/editormd.min.js"></script>
 <script>
     function changetouser_modal_show() {
         $("#changetouser_modal").modal();
@@ -164,7 +164,7 @@
                 url: "/admin/user/changetouser",
                 dataType: "json",
                 data: {
-                    userid: {$ticket->User()->id},
+                    userid: {$ticket->user()->id},
                     adminid: {$user->id},
                     local: '/admin/ticket/' + {$ticket->id} +'/view'
                 },

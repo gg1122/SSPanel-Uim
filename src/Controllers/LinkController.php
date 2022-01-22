@@ -13,6 +13,7 @@ use App\Utils\{
     URL,
     Tools,
     AppURI,
+    ConfGenerate,
     ConfRender
 };
 use voku\helper\AntiXSS;
@@ -150,7 +151,7 @@ class LinkController extends BaseController
 
         $getBody = '';
 
-        $sub_type_array = ['list', 'clash', 'surge', 'surfboard', 'quantumult', 'quantumultx', 'sub'];
+        $sub_type_array = ['list', 'clash', 'surge', 'surfboard','anxray', 'quantumult', 'quantumultx', 'sub'];
         foreach ($sub_type_array as $key) {
             if (isset($opts[$key])) {
                 $query_value = $opts[$key];
@@ -236,13 +237,8 @@ class LinkController extends BaseController
                 break;
             case 'clash':
                 if ($value !== null) {
-                    if ((int) $value == 2) {
-                        $return = self::getSubscribeExtend('clashr');
-                        $return['class'] = 'Clash';
-                    } else {
-                        $return = self::getSubscribeExtend('clash');
-                        $return['class'] = 'Clash';
-                    }
+                    $return = self::getSubscribeExtend('clash');
+                    $return['class'] = 'Clash';
                 } else {
                     $return = [
                         'filename' => 'Clash',
@@ -267,16 +263,16 @@ class LinkController extends BaseController
                     ];
                 }
                 break;
-            case 'clashr':
-                $return = [
-                    'filename' => 'ClashR',
-                    'suffix'   => 'yaml',
-                    'class'    => 'Lists'
-                ];
-                break;
             case 'v2rayn':
                 $return = [
                     'filename' => 'V2RayN',
+                    'suffix'   => 'txt',
+                    'class'    => 'Sub'
+                ];
+                break;
+            case 'trojan':
+                $return = [
+                    'filename' => 'Trojan',
                     'suffix'   => 'txt',
                     'class'    => 'Sub'
                 ];
@@ -288,6 +284,13 @@ class LinkController extends BaseController
                     'class'    => 'Lists'
                 ];
                 break;
+            case 'anxray':
+                $return = [
+                    'filename' => 'AnXray',
+                    'suffix'   => 'txt',
+                    'class'    => 'AnXray'
+                ];
+                break;	
             case 'surfboard':
                 $return = [
                     'filename' => 'Surfboard',
@@ -330,13 +333,6 @@ class LinkController extends BaseController
             case 'clash_provider':
                 $return = [
                     'filename' => 'ClashProvider',
-                    'suffix'   => 'yaml',
-                    'class'    => 'Lists'
-                ];
-                break;
-            case 'clashr_provider':
-                $return = [
-                    'filename' => 'ClashRProvider',
                     'suffix'   => 'yaml',
                     'class'    => 'Lists'
                 ];
@@ -393,7 +389,7 @@ class LinkController extends BaseController
      * 响应内容
      *
      * @param User   $user
-     * @param array  $response
+     * @param object $response
      * @param string $content  订阅内容
      * @param string $filename 文件名
      */
@@ -446,10 +442,9 @@ class LinkController extends BaseController
             'trojan'          => '?sub=4',
             // apps
             'ssa'             => '?list=ssa',
+            'anxray'		  => '?anxray=1',
             'clash'           => '?clash=1',
             'clash_provider'  => '?list=clash',
-            'clashr'          => '?clash=2',
-            'clashr_provider' => '?list=clashr',
             'surge'           => '?surge=' . $int,
             'surge_node'      => '?list=surge',
             'surge2'          => '?surge=2',
@@ -486,14 +481,14 @@ class LinkController extends BaseController
             case 'ssa':
                 $return = AppURI::getSSJSON($item);
                 break;
+            case 'anxray':
+                $return = AppURI::getAnXrayURI($item);
+                break;	
             case 'surge':
                 $return = AppURI::getSurgeURI($item, 3);
                 break;
             case 'clash':
                 $return = AppURI::getClashURI($item);
-                break;
-            case 'clashr':
-                $return = AppURI::getClashURI($item, true);
                 break;
             case 'v2rayn':
                 $return = AppURI::getV2RayNURI($item);
@@ -536,7 +531,6 @@ class LinkController extends BaseController
             switch ($list) {
                 case 'ssa':
                 case 'clash':
-                case 'clashr':
                     $return = array_merge($return, self::getListExtend($user, $list));
                     break;
                 default:
@@ -555,7 +549,6 @@ class LinkController extends BaseController
                 return json_encode($return, 320);
                 break;
             case 'clash':
-            case 'clashr':
                 return \Symfony\Component\Yaml\Yaml::dump(['proxies' => $return], 4, 2);
             case 'kitsunebi':
             case 'quantumult':
@@ -601,7 +594,7 @@ class LinkController extends BaseController
             'port'            => 10086,
             'method'          => 'chacha20-ietf',
             'passwd'          => $user->passwd,
-            'id'              => $user->getUuid(),
+            'id'              => $user->uuid,
             'aid'             => 0,
             'net'             => 'tcp',
             'headerType'      => 'none',
@@ -672,7 +665,7 @@ class LinkController extends BaseController
             $Profiles = ($surge == 2 ? $_ENV['Surge2_DefaultProfiles'] : $_ENV['Surge_DefaultProfiles']);
         }
 
-        return ConfController::getSurgeConfs($user, $All_Proxy, $Nodes, $_ENV[$variable][$Profiles]);
+        return ConfGenerate::getSurgeConfs($user, $All_Proxy, $Nodes, $_ENV[$variable][$Profiles]);
     }
 
     /**
@@ -789,7 +782,7 @@ class LinkController extends BaseController
             $Profiles = $_ENV['Surfboard_DefaultProfiles']; // 默认策略组
         }
 
-        return ConfController::getSurgeConfs($user, $All_Proxy, $Nodes, $_ENV['Surfboard_Profiles'][$Profiles]);
+        return ConfGenerate::getSurgeConfs($user, $All_Proxy, $Nodes, $_ENV['Surfboard_Profiles'][$Profiles]);
     }
 
     /**
@@ -806,11 +799,10 @@ class LinkController extends BaseController
     {
         $subInfo = self::getSubinfo($user, $clash);
         $userapiUrl = $subInfo['clash'];
-        $ssr_support = ($clash == 2 ? true : false);
         $items = URL::getNew_AllItems($user, $Rule);
         $Proxys = [];
         foreach ($items as $item) {
-            $Proxy = AppURI::getClashURI($item, $ssr_support);
+            $Proxy = AppURI::getClashURI($item);
             if ($Proxy !== null) {
                 $Proxys[] = $Proxy;
             }
@@ -822,9 +814,23 @@ class LinkController extends BaseController
             $Profiles = $_ENV['Clash_DefaultProfiles']; // 默认策略组
         }
 
-        return ConfController::getClashConfs($user, $Proxys, $_ENV['Clash_Profiles'][$Profiles]);
+        return ConfGenerate::getClashConfs($user, $Proxys, $_ENV['Clash_Profiles'][$Profiles]);
     }
 
+    public static function getAnXray($user, $anxray, $opts, $Rule)
+    {
+        $subInfo = self::getSubinfo($user, $anxray);
+        $All_Proxy  = '';
+        $userapiUrl = $subInfo['anxray'];	
+        $items = URL::getNew_AllItems($user, $Rule); 
+        foreach ($items as $item) {
+                $out = AppURI::getAnXrayURI($item);	
+                if ($out !== null) {
+                  $All_Proxy .= $out . PHP_EOL;
+                }
+        }
+        return base64_encode($All_Proxy);
+    }
     /**
      * 通用订阅，ssr & v2rayn
      *

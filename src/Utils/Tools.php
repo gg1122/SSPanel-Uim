@@ -2,12 +2,24 @@
 
 namespace App\Utils;
 
-use App\Models\{Model, User, Node, Relay};
+use App\Models\{Link, Model, User, Node};
 use App\Services\Config;
+use App\Utils\QQWry;
 use DateTime;
 
 class Tools
 {
+    /**
+     * 查询IP归属
+     */
+    public static function getIpInfo($ip)
+    {
+        $iplocation = new QQWry();
+        $location   = $iplocation->getlocation($ip);
+        $ipInfo     = iconv('gbk', 'utf-8//IGNORE', $location['country'] . $location['area']);
+        return $ipInfo;
+    }
+
     /**
      * 根据流量值自动转换单位输出
      */
@@ -186,11 +198,14 @@ class Tools
 
     public static function getAvPort()
     {
-        //检索User数据表现有port
-        $det = User::pluck('port')->toArray();
-        $port = array_diff(range($_ENV['min_port'], $_ENV['max_port']), $det);
-        shuffle($port);
-        return $port[0];
+        if ($_ENV['min_port'] > 65535 || $_ENV['min_port'] <= 0 || $_ENV['max_port'] > 65535 || $_ENV['max_port'] <= 0) {
+            return 0;
+        } else {
+            $det = User::pluck('port')->toArray();
+            $port = array_diff(range($_ENV['min_port'], $_ENV['max_port']), $det);
+            shuffle($port);
+            return $port[0];
+        }
     }
 
     public static function base64_url_encode($input)
@@ -225,65 +240,6 @@ class Tools
         return !preg_match($pattern, $str);
     }
 
-    public static function is_relay_rule_avaliable($rule, $ruleset, $node_id)
-    {
-        $cur_id = $rule->id;
-
-        foreach ($ruleset as $single_rule) {
-            if (($rule->port == $single_rule->port || $single_rule->port == 0) && ($node_id == $single_rule->source_node_id || $single_rule->source_node_id == 0) && (($rule->id != $single_rule->id && $rule->priority < $single_rule->priority) || ($rule->id < $single_rule->id && $rule->priority == $single_rule->priority))) {
-                $cur_id = $single_rule->id;
-            }
-        }
-
-        return !($cur_id != $rule->id);
-    }
-
-    public static function pick_out_relay_rule($relay_node_id, $port, $ruleset)
-    {
-        /*
-        for id in self.relay_rule_list:
-            if ((self.relay_rule_list[id]['user_id'] == user_id or self.relay_rule_list[id]['user_id'] == 0) or row['is_multi_user'] != 0) and (self.relay_rule_list[id]['port'] == 0 or self.relay_rule_list[id]['port'] == port):
-                has_higher_priority = False
-                for priority_id in self.relay_rule_list:
-                    if ((self.relay_rule_list[priority_id]['priority'] > self.relay_rule_list[id]['priority'] and self.relay_rule_list[id]['id'] != self.relay_rule_list[priority_id]['id']) or (self.relay_rule_list[priority_id]['priority'] == self.relay_rule_list[id]['priority'] and self.relay_rule_list[id]['id'] > self.relay_rule_list[priority_id]['id'])) and (self.relay_rule_list[id]['user_id'] == self.relay_rule_list[priority_id]['user_id'] or self.relay_rule_list[priority_id]['user_id'] == 0) and (self.relay_rule_list[id]['port'] == self.relay_rule_list[priority_id]['port'] or self.relay_rule_list[priority_id]['port'] == 0):
-                        has_higher_priority = True
-                        continue
-
-                if has_higher_priority:
-                    continue
-
-            temp_relay_rules[id] = self.relay_rule_list[id]
-        */
-
-        $match_rule = null;
-
-        foreach ($ruleset as $single_rule) {
-            if (($single_rule->port == $port || $single_rule->port == 0) && ($single_rule->source_node_id == 0 || $single_rule->source_node_id == $relay_node_id)) {
-                $has_higher_priority = false;
-                foreach ($ruleset as $priority_rule) {
-                    if (($priority_rule->port == $port || $priority_rule->port == 0) && ($priority_rule->source_node_id == 0 || $priority_rule->source_node_id == $relay_node_id)) {
-                        if (($priority_rule->priority > $single_rule->priority && $priority_rule->id != $single_rule->id) || ($priority_rule->priority == $single_rule->priority && $priority_rule->id < $single_rule->id)) {
-                            $has_higher_priority = true;
-                            continue;
-                        }
-                    }
-                }
-
-                if ($has_higher_priority) {
-                    continue;
-                }
-
-                $match_rule = $single_rule;
-            }
-        }
-
-        if (($match_rule != null) && $match_rule->dist_node_id == -1) {
-            return null;
-        }
-
-        return $match_rule;
-    }
-
     public static function get_middle_text($origin_text, $begin_text, $end_text)
     {
         $begin_pos = strpos($origin_text, $begin_text);
@@ -306,15 +262,6 @@ class Tools
             return true;
         }
         return false;
-    }
-
-    public static function is_protocol_relay($user)
-    {
-        return true;
-
-        $relay_able_list = Config::getSupportParam('relay_able_protocol');
-
-        return in_array($user->protocol, $relay_able_list) || $_ENV['relay_insecure_mode'] == true;
     }
 
     public static function has_conflict_rule(
@@ -376,8 +323,7 @@ class Tools
                 if ($single_rule->dist_node_id == $path->begin_node->id) {
                     $path->begin_node = $single_rule->Source_Node();
                     if ($path->begin_node->isNodeAccessable() == false) {
-                        $path->path = '<span style="color: #FF0000; ">' . $single_rule->Source_Node(
-                            )->name . '</span>' . ' → ' . $path->path;
+                        $path->path = '<span style="color: #FF0000; ">' . $single_rule->Source_Node()->name . '</span>' . ' → ' . $path->path;
                         $path->status = '阻断';
                     } else {
                         $path->path = $single_rule->Source_Node()->name . ' → ' . $path->path;
@@ -389,8 +335,7 @@ class Tools
                 if ($path->end_node->id == $single_rule->source_node_id) {
                     $path->end_node = $single_rule->Dist_Node();
                     if ($path->end_node->isNodeAccessable() == false) {
-                        $path->path .= ' → ' . '<span style="color: #FF0000; ">' . $single_rule->Dist_Node(
-                            )->name . '</span>';
+                        $path->path .= ' → ' . '<span style="color: #FF0000; ">' . $single_rule->Dist_Node()->name . '</span>';
                         $path->status = '阻断';
                     } else {
                         $path->path .= ' → ' . $single_rule->Dist_Node()->name;
@@ -442,47 +387,6 @@ class Tools
         return $object;
     }
 
-    public static function relayRulePortCheck($rules)
-    {
-        $res = [];
-        foreach ($rules as $value) {
-            $res[$value->port][] = $value->port;
-        }
-        return count($res) == count($rules);
-    }
-
-    public static function getRelayNodeIp($source_node, $dist_node)
-    {
-        $dist_ip_str = $dist_node->node_ip;
-        $dist_ip_array = explode(',', $dist_ip_str);
-        $return_ip = null;
-        foreach ($dist_ip_array as $single_dist_ip_str) {
-            $child1_array = explode('#', $single_dist_ip_str);
-            if ($child1_array[0] == $single_dist_ip_str) {
-                $return_ip = $child1_array[0];
-            } elseif (isset($child1_array[1])) {
-                $node_id_array = explode('|', $child1_array[1]);
-                if (in_array($source_node->id, $node_id_array)) {
-                    $return_ip = $child1_array[0];
-                }
-            }
-        }
-
-        return $return_ip;
-    }
-
-    public static function updateRelayRuleIp($dist_node)
-    {
-        $rules = Relay::where('dist_node_id', $dist_node->id)->get();
-
-        foreach ($rules as $rule) {
-            $source_node = Node::where('id', $rule->source_node_id)->first();
-
-            $rule->dist_ip = self::getRelayNodeIp($source_node, $dist_node);
-            $rule->save();
-        }
-    }
-
     public static function checkNoneProtocol($user)
     {
         return !($user->method == 'none' && !in_array($user->protocol, Config::getSupportParam('allow_none_protocol')));
@@ -527,14 +431,23 @@ class Tools
             } elseif ($item['net'] == 'tls') {
                 $item['tls'] = 'tls';
             }
+            if ($server[4] == 'grpc') {
+                $item['net'] = 'grpc';
+            }
         }
         if (count($server) >= 5) {
             if (in_array($item['net'], array('kcp', 'http', 'mkcp'))) {
                 $item['headerType'] = $server[4];
-            } elseif ($server[4] == 'ws') {
-                $item['net'] = 'ws';
-            } elseif ($server[4] == 'tls') {
-                $item['tls'] = 'tls';
+            } else {
+                switch ($server[4]) {
+                    case 'ws':
+                        $item['net'] = $server[4];
+                        break;
+                    case 'tls':
+                    case 'xtls':
+                        $item['tls'] = $server[4];
+                        break;
+                }
             }
         }
         if (count($server) >= 6 && $server[5] != '') {
@@ -557,6 +470,34 @@ class Tools
             }
             if (isset($item['inside_port'])) {
                 unset($item['inside_port']);
+            }
+
+            if (array_key_exists('servicename', $item)) {
+                $item['servicename'] = $item['servicename'];
+            } else {
+                $item['servicename'] = "";
+            }
+
+            if (array_key_exists('enable_xtls', $item)) {
+                $item['enable_xtls'] = $item['enable_xtls'];
+            } else {
+                $item['enable_xtls'] = "";
+            }
+
+            if (array_key_exists('flow', $item)) {
+                $item['flow'] = $item['flow'];
+            } else {
+                $item['flow'] = "xtls-rprx-direct";
+            }
+
+            if (array_key_exists('enable_vless', $item)) {
+                $item['vtype'] = 'vless://';
+            } else {
+                $item['vtype'] = 'vmess://';
+            }
+
+            if (!array_key_exists('sni', $item)) {
+                $item['sni'] = $item['host'];
             }
         }
         return $item;
@@ -591,10 +532,12 @@ class Tools
                 $item['tls'] = 'tls';
             }
         }
-        if (count($server) >= 5 && $server[4] == 'ws') {
-            $item['net'] = 'ws';
-        } elseif (count($server) >= 5 && $server[4] == 'tls') {
-            $item['tls'] = 'tls';
+        if (count($server) >= 5) {
+            if ($server[4] == 'ws') {
+                $item['net'] = 'ws';
+            } elseif ($server[4] == 'tls') {
+                $item['tls'] = 'tls';
+            }
         }
         if (count($server) >= 6) {
             $item = array_merge($item, URL::parse_args($server[5]));
@@ -635,12 +578,12 @@ class Tools
                         $args_explode = explode('+', $item['port']);
                         foreach ($args_explode as $arg) {
                             if ((int)substr($arg, 0, strpos($arg, '#')) == $mu_port) {
-                                $node_port = (int)substr($arg, strpos($arg, '#') + 1);
+                                $node_port = (int) substr($arg, strpos($arg, '#') + 1);
                             }
                         }
                     } else {
                         if ((int)substr($item['port'], 0, strpos($item['port'], '#')) == $mu_port) {
-                            $node_port = (int)substr($item['port'], strpos($item['port'], '#') + 1);
+                            $node_port = (int) substr($item['port'], strpos($item['port'], '#') + 1);
                         }
                     }
                 } else { // 端口偏移，偏移端口，格式：8.8.8.8;port=1000 or 8.8.8.8;port=-1000
@@ -650,9 +593,9 @@ class Tools
         }
 
         return [
-            'name' => ($_ENV['disable_sub_mu_port'] ? $node_name : $node_name . ' - ' . $node_port . ' 单端口'),
+            'name'    => ($_ENV['disable_sub_mu_port'] ? $node_name : $node_name . ' - ' . $node_port . ' 单端口'),
             'address' => $node_server[0],
-            'port' => $node_port
+            'port'    => (int) $node_port
         ];
     }
 
@@ -668,16 +611,44 @@ class Tools
                     if (strpos($item['port'], '+') !== false) {
                         $args_explode = explode('+', $item['port']);
                         foreach ($args_explode as $arg) {
-                            $port[substr($arg, 0, strpos($arg, '#'))] = (int)substr($arg, strpos($arg, '#') + 1);
+                            $replace_port = substr($arg, strpos($arg, '#') + 1);
+
+                            if (strpos($replace_port, '@') !== false) {
+                                $display_port = substr($replace_port, 0, strpos($replace_port, '@'));
+                                $backend_port = substr($replace_port, strpos($replace_port, '@') + 1);
+
+                                $port[substr($arg, 0, strpos($arg, '#'))] = [
+                                    "backend" => (int) $backend_port,
+                                    "display" => (int) $display_port
+                                ];
+                            } else {
+                                $user_port = substr($arg, 0, strpos($arg, '#'));
+
+                                $port[$user_port] = [
+                                    "backend" => (int) $user_port,
+                                    "display" => (int) $user_port
+                                ];
+                            }
                         }
                     } else {
-                        $port[substr($item['port'], 0, strpos($item['port'], '#'))] = (int)substr(
-                            $item['port'],
-                            strpos(
-                                $item['port'],
-                                '#'
-                            ) + 1
-                        );
+                        $replace_port = substr($item['port'], strpos($item['port'], '#') + 1);
+
+                        if (strpos($replace_port, '@') !== false) {
+                            $display_port = substr($replace_port, 0, strpos($replace_port, '@'));
+                            $backend_port = substr($replace_port, strpos($replace_port, '@') + 1);
+
+                            $port[substr($item['port'], 0, strpos($item['port'], '#'))] = [
+                                "backend" => (int) $backend_port,
+                                "display" => (int) $display_port
+                            ];
+                        } else {
+                            $user_port = substr($item['port'], 0, strpos($item['port'], '#'));
+
+                            $port[$user_port] = [
+                                "backend" => (int) $user_port,
+                                "display" => (int) $user_port
+                            ];
+                        }
                     }
                 } else {
                     $type = (int)$item['port'];
@@ -917,7 +888,7 @@ class Tools
      * @param DatatablesHelper $db
      * @param string $table
      */
-    public function reset_auto_increment($db, $table)
+    public static function reset_auto_increment($db, $table)
     {
         $maxid = $db->query(
             "SELECT `auto_increment` AS `maxid` FROM `information_schema`.`tables` WHERE `table_schema` = '" . $_ENV['db_database'] . "' AND `table_name` = '" . $table . "'"
@@ -997,5 +968,24 @@ class Tools
         }
         $html .= '</ul>';
         return $html;
+    }
+
+    public static function etag($data)
+    {
+        $etag = sha1(json_encode($data));
+        return $etag;
+    }
+
+    public static function genSubToken()
+    {
+        for ($i = 0; $i < 10; $i++) {
+            $token = self::genRandomChar(16);
+            $is_token_used = Link::where('token', $token)->first();
+            if ($is_token_used == null) {
+                return $token;
+            }
+        }
+
+        return "couldn't alloc token";
     }
 }

@@ -8,22 +8,42 @@
 
 namespace App\Services\Gateway;
 
-use App\Services\Auth;
-use App\Models\Paylist;
-use App\Services\View;
 use Exception;
 use Omnipay\Omnipay;
+use App\Services\View;
+use App\Services\Auth;
+use App\Models\Paylist;
+use App\Models\Setting;
 
 class AopF2F extends AbstractPayment
 {
+    public static function _name() 
+    {
+        return 'f2fpay';
+    }
+
+    public static function _enable() 
+    {
+        return self::getActiveGateway('f2fpay');
+    }
+
+    public static function _readableName() {
+        return "支付宝在线充值";
+    }
+
     private function createGateway()
     {
+        $configs = Setting::getClass('f2f');
         $gateway = Omnipay::create('Alipay_AopF2F');
         $gateway->setSignType('RSA2'); //RSA/RSA2
-        $gateway->setAppId($_ENV['f2fpay_app_id']);
-        $gateway->setPrivateKey($_ENV['merchant_private_key']); // 可以是路径，也可以是密钥内容
-        $gateway->setAlipayPublicKey($_ENV['alipay_public_key']); // 可以是路径，也可以是密钥内容
-        $notifyUrl = $_ENV['f2fNotifyUrl'] ?? ($_ENV['baseUrl'] . '/payment/notify');
+        $gateway->setAppId($configs['f2f_pay_app_id']);
+        $gateway->setPrivateKey($configs['f2f_pay_private_key']); // 可以是路径，也可以是密钥内容
+        $gateway->setAlipayPublicKey($configs['f2f_pay_public_key']); // 可以是路径，也可以是密钥内容
+        if ($configs['f2f_pay_notify_url'] == '') {
+            $notifyUrl = self::getCallbackUrl();
+        } else {
+            $notifyUrl = $configs['f2f_pay_notify_url'];
+        }
         $gateway->setNotifyUrl($notifyUrl);
         return $gateway;
     }
@@ -34,9 +54,10 @@ class AopF2F extends AbstractPayment
         $amount = $request->getParam('amount');
         $user = Auth::getUser();
         if ($amount == '') {
-            $res['ret'] = 0;
-            $res['msg'] = '订单金额错误：' . $amount;
-            return $response->getBody()->write(json_encode($res));
+            return $response->withJson([
+                'ret' => 0,
+                'msg' => '订单金额错误：' . $amount
+            ]);
         }
 
         $pl = new Paylist();
@@ -88,7 +109,7 @@ class AopF2F extends AbstractPayment
     }
 
 
-    public function getPurchaseHTML()
+    public static function getPurchaseHTML()
     {
         return View::getSmarty()->fetch('user/aopf2f.tpl');
     }
